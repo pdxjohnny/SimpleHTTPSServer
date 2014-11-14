@@ -6,6 +6,8 @@ import ssl
 import Cookie
 import argparse
 import thread
+import os
+import urllib2
 
 class server(object):
 	def __init__(self, server_address, RequestHandler, bind_and_activate = True, key = False, crt = False, threading = False ):
@@ -23,21 +25,28 @@ class server(object):
 
 		# If a .key and .crt file are provided make it an SSL socket
 		if self.key and self.crt:
-			self.socket = ssl.wrap_socket(self.socket, keyfile=self.key, certfile=self.crt, cert_reqs=ssl.CERT_NONE)
+			self.socket = self.wrap_socket( self.socket )
 
 		if bind_and_activate:
 			self.serve_forever()
+
+	def wrap_socket( self, unwraped_socket ):
+		return ssl.wrap_socket( unwraped_socket, keyfile=self.key,  certfile=self.crt )
 
 	def serve_forever( self ):
 		self.socket.bind( self.server_address )
 		self.socket.listen(10)
 		print "Waiting for connections..."
 		while True:
-			client_socket, client_address = self.socket.accept()
-			if self.threading:
-				thread.start_new_thread( self.RequestHandler._handle, ( client_socket, client_address ) )
-			else:
-				self.RequestHandler._handle( client_socket, client_address )
+			try:
+				client_socket, client_address = self.socket.accept()
+				if self.threading:
+					thread.start_new_thread( self.RequestHandler._handle, ( client_socket, client_address ) )
+				else:
+					self.RequestHandler._handle( client_socket, client_address )
+			except ssl.SSLError, e:
+				pass
+				# print "SSL ERROR", e
 
 class handler(object):
 
@@ -49,7 +58,6 @@ class handler(object):
 		response = "500 Internal Server Error"
 		try:
 			data = self._recv( client_socket )
-
 			if data:
 				method, page = self._get_request( data )
 				print "\'%s\':\'%s\'" % ( method, page )
@@ -107,7 +115,9 @@ class handler(object):
 		first_line = data.split('\n')[0]
 		first_line = first_line.split("/")
 		method = first_line[0].replace(' ', '').lower()
-		page = '/' + '/'.join(first_line[1:]).split("HTTP")[0].replace(' ', '')
+		page = '/' + '/'.join(first_line[1:])
+		page = 'HTTP'.join(page.split("HTTP")[:-1])
+		page = page.replace(' ', '')
 		return method, page
 
 	def create_header( self ):
@@ -171,14 +181,46 @@ class handler(object):
 			return form_data
 		return form_data
 
+	def static_file( self, page ):
+		response = '404 Not Found'
+		if os.name == 'nt':
+			page = page.replace('/','\\')
+		try:
+			with open( page, 'rb' ) as output:
+				response = ''
+				for line in output:
+					response += line
+		except:
+			pass
+		return response
 
-class static(handler):
-	"""docstring for static"""
+	def template( self, page, variables ):
+		response = '404 Not Found'
+		if os.name == 'nt':
+			page = page.replace('/','\\')
+		try:
+			with open( page, 'r' ) as output:
+				response = ''
+				for line in output:
+					for variable in variables:
+						found = '{{' + variable + '}}'
+						if found in line:
+							line = line.split( found )
+							line = variables[variable].join( line )
+					response += line
+		except:
+			pass
+		return response
+
+
+class example(handler):
+	"""docstring for example"""
 	def __init__( self ):
-		super(static, self).__init__()
+		super(example, self).__init__()
 		self.actions = [ ( 'post', '/', self.post_response ),
 			( 'get', '/user/:username', self.get_user ),
-			( 'get', '/:dir', self.index ) ]
+			( 'get', '/', self.index ),
+			( 'get', '/:file', self.get_file ) ]
 		
 	def post_response( self, method, page, data, variables ):
 		form_data = self.form_data( data )
@@ -188,33 +230,33 @@ class static(handler):
 		return self.end_response( headers, output )
 		
 	def get_user( self, method, page, data, variables ):
-		output = json.dumps(variables)
+		output = self.template( 'user.html', variables )
 		headers = self.create_header()
-		headers = self.add_header( headers, ( "Content-Type", "application/json") )
+		headers = self.add_header( headers, ( "Content-Type", "text/html") )
+		return self.end_response( headers, output )
+
+	def get_file( self, method, page, data, variables ):
+		output = self.static_file( variables['file'] )
+		headers = self.create_header()
+		headers = self.add_header( headers, ( "Content-Type", "text/html") )
 		return self.end_response( headers, output )
 		
 	def index( self, method, page, data, variables ):
-		output = "Welcome"
+		output = self.static_file( "index.html" )
 		headers = self.create_header()
 		headers = self.add_header( headers, ( "Content-Type", "text/html") )
 		return self.end_response( headers, output )
 
 
 def main():
-	parser = argparse.ArgumentParser()
-	parser.add_argument("-l", help="Logs all actions of server and connections")
-	parser.add_argument("-p", help="Sets the port to bind to, 80")
-	parser.add_argument("-a", help="Sets the address to bind to, 0.0.0.0")
-	args = parser.parse_args()
-
 	address = "0.0.0.0"
-	port = 80
-	# if args.p:
-	# 	port = int( args.p )
-	# if args.s
-	# 	address = int( args.s )
 
-	run_server = server( ( address, port ), static(), threading = True )
+	http = server( ( address, 80 ), example(), bind_and_activate = False, threading = True )
+	https = server( ( address, 443 ), example(), bind_and_activate = False, threading = True, key = 'server.key', crt = 'server.crt' )
+
+	thread.start_new_thread( http.serve_forever, () )
+	https.serve_forever()
+
 
 if __name__ == '__main__':
 	main()
