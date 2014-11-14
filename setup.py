@@ -7,7 +7,7 @@ setup(
   author = 'John Andersen',
   author_email = 'johnandersenpdx@gmail.com',
   url = 'https://github.com/pdxjohnny/pywebserver', # use the URL to the github repo
-  download_url = 'https://github.com/pdxjohnny/pywebserver/tarball/0.1', # I'll explain this in a second
+  download_url = 'https://github.com/pdxjohnny/pywebserver/tarball/0.2', # I'll explain this in a second
   keywords = ['server', 'http', 'https', 'ssl'], # arbitrary keywords
   classifiers = [],
 )
