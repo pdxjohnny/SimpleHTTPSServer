@@ -8,6 +8,7 @@ import argparse
 import thread
 import os
 import urllib2
+import traceback
 
 class server(object):
 	def __init__(self, server_address, RequestHandler, bind_and_activate = True, key = False, crt = False, threading = False ):
@@ -64,12 +65,21 @@ class handler(object):
 				for action in self.actions:
 					variables = self._get_variables( page, action[1] )
 					if action[0] == method and variables:
-						response = action[2]( method, page, data, variables )
+						request = {
+							'method': method,
+							'page': page,
+							'data': data,
+							'variables': variables,
+							'socket': client_socket
+						}
+						response = action[2]( request )
 						break
 		except Exception, e:
-			print "ERROR", e
+			print '\n\n\n\n', "ERROR", e
+			print traceback.print_exc(), '\n\n\n\n'
 
-		client_socket.sendall( response )
+		if response:
+			client_socket.sendall( response )
 		
 		client_socket.close()
 		# print client_address, "- closed connection."
@@ -97,18 +107,44 @@ class handler(object):
 		return False
 
 	def _recv( self, sock ):
-		msg = sock.recv(4048).strip()
-		if len(msg) < 1:
+		data = sock.recv(4048).strip()
+		# Check of a content length, if there is one
+		# then data is being uploaded
+		content_length = False
+		for line in data.split('\r\n'):
+			if 'Content-Length' in line:
+				content_length = int(line.split(' ')[-1])
+		# If theres a content length he now there is
+		# a body that is seperated from the headers
+		if content_length:
+			# Receve until we have all the headers
+			# we know we have then wehn we reach the
+			# body delim, '\r\n\r\n'
+			while data.find('\r\n\r\n') == -1:
+				data += sock.recv(20)
+			# Parse the headers so he can use them
+			headers = self.get_headers( data )
+			if 'boundary=' in headers['Content-Type']:
+				feild_delim = headers['Content-Type'].split('boundary=')[-1]
+			data += self._recvall( sock, content_length - len(data.split('\r\n\r\n')[1]), feild_delim + '--\r\n' )
+		if len(data) < 1:
 			return False
-		return msg
+		return data
 
-	def _recvall( self, sock, n ):
+	def get_headers( self, data ):
+		headers_as_object = {}
+		headers = data.split('\r\n\r\n')[0]
+		for line in headers.split('\r\n'):
+			if line.find(': ') != -1:
+				headers_as_object[ line.split(': ')[0] ] = ': '.join(line.split(': ')[1:])
+		return headers_as_object
+
+	def _recvall( self, sock, n, end_on = False ):
 		data = ''
 		while len(data) < n:
-			packet = sock.recv(n - len(data))
-			if not packet:
-				return False
-			data += packet
+			if end_on and data[ -len(end_on): ] == end_on:
+				break
+			data += sock.recv(n - len(data))
 		return data
 
 	def _get_request( self, data ):
@@ -157,20 +193,25 @@ class handler(object):
 
 	def form_data( self, data ):
 		form_data = {}
+		headers = self.get_headers( data )
 		# form-data
-		if data.find('Content-Disposition: form-data; ') > -1:
-			form_data = ''.join(data.split('Content-Disposition: form-data; ')[1:])
-			post = urllib.unquote( form_data ).decode('utf8').split('\r\n')
-			form_data = []
-			for p in post:
-				if not len(p) < 1 and not p.startswith("-"):
-					form_data.append(p)
-			post = form_data
+		if 'multipart/form-data' in headers['Content-Type']:
+			if 'boundary=' in headers['Content-Type']:
+				feild_delim = headers['Content-Type'].split('boundary=')[-1]
+			# Dont take the first one because thats with the headers
+			post = feild_delim.join( data.split( feild_delim )[2:] )
+			post = urllib.unquote( post ).decode('utf8')
+			post = post.split(feild_delim)
+
+			post = [ p.split('\r\n\r\n') for p in post ]
+
 			form_data = {}
-			p = 0
-			while p < len(post):
-				form_data[ post[p].split('name=\"')[1][:-1] ] = post[p+1]
-				p += 2
+			for p in post:
+				if len(p) > 1:
+					name_start = p[0].find('\"') + 1
+					name_end = p[0].find('\"', name_start+1)
+					name = p[0][name_start:name_end]
+					form_data[ name ] = '\r\n\r\n'.join( p[1:] )[:-4]
 			return form_data
 		# x-www-form-urlencoded
 		else:
@@ -217,45 +258,48 @@ class example(handler):
 	"""docstring for example"""
 	def __init__( self ):
 		super(example, self).__init__()
-		self.actions = [ ( 'post', '/', self.post_response ),
+		self.actions = [ ( 'post', '/post_file', self.post_response ),
 			( 'get', '/user/:username', self.get_user ),
+			( 'get', '/post/:year/:month/:day', self.get_post ),
 			( 'get', '/', self.index ),
 			( 'get', '/:file', self.get_file ) ]
 		
-	def post_response( self, method, page, data, variables ):
-		form_data = self.form_data( data )
-		output = json.dumps(form_data)
+	def post_response( self, request ):
+		form_data = self.form_data( request['data'] )
+		output = "<pre>" + json.dumps(form_data, sort_keys=True, indent=4, separators=(',', ': ')) + "</pre>"
 		headers = self.create_header()
-		headers = self.add_header( headers, ( "Content-Type", "application/json") )
 		return self.end_response( headers, output )
 		
-	def get_user( self, method, page, data, variables ):
-		output = self.template( 'user.html', variables )
+	def get_user( self, request ):
+		output = self.template( 'user.html', request['variables'] )
 		headers = self.create_header()
-		headers = self.add_header( headers, ( "Content-Type", "text/html") )
+		return self.end_response( headers, output )
+		
+	def get_post( self, request ):
+		output = json.dumps(request['variables'])
+		headers = self.add_header( headers, ( "Content-Type", "application/json") )
+		headers = self.create_header()
 		return self.end_response( headers, output )
 
-	def get_file( self, method, page, data, variables ):
-		output = self.static_file( variables['file'] )
+	def get_file( self, request ):
+		output = self.static_file( request['variables']['file'] )
 		headers = self.create_header()
-		headers = self.add_header( headers, ( "Content-Type", "text/html") )
 		return self.end_response( headers, output )
 		
-	def index( self, method, page, data, variables ):
+	def index( self, request ):
 		output = self.static_file( "index.html" )
 		headers = self.create_header()
-		headers = self.add_header( headers, ( "Content-Type", "text/html") )
 		return self.end_response( headers, output )
 
 
 def main():
 	address = "0.0.0.0"
 
-	http = server( ( address, 80 ), example(), bind_and_activate = False, threading = True )
-	https = server( ( address, 443 ), example(), bind_and_activate = False, threading = True, key = 'server.key', crt = 'server.crt' )
+	http = server( ( address, 80 ), example(), bind_and_activate = False, threading = False )
+	# https = server( ( address, 443 ), example(), bind_and_activate = False, threading = True, key = 'server.key', crt = 'server.crt' )
 
-	thread.start_new_thread( http.serve_forever, () )
-	https.serve_forever()
+	# thread.start_new_thread( http.serve_forever, () )
+	http.serve_forever()
 
 
 if __name__ == '__main__':
