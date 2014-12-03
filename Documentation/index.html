@@ -65,39 +65,63 @@
 import SimpleHTTPSServer
 import json
 
-class my_test(SimpleHTTPSServer.handler):
-	"""docstring for my_test"""
+class example(handler):
+	"""example of how to use SimpleHTTPSServer"""
 	def __init__( self ):
-		super(my_test, self).__init__()
-		self.actions = [ ( 'post', '/', self.post_response ),
+		super(example, self).__init__()
+		self.actions = [ ( 'post', '/:any', self.post_echo ),
+			( 'post', '/post_file', self.post_response ),
 			( 'get', '/user/:username', self.get_user ),
-			( 'get', '/:dir', self.index ) ]
+			( 'get', '/post/:year/:month/:day', self.get_post ),
+			( 'get', '/', self.index ),
+			( 'get', '/:file', self.get_file ) ]
 		
-	def post_response( self, method, page, data, variables ):
-		form_data = self.form_data( data )
-		output = json.dumps(form_data)
+	def post_echo( self, request ):
+		try:
+			output = self.form_data( request['data'] )
+		except:
+			print request['data']
+			output = {'ERROR': 'parse_error'}
+		output = json.dumps( output )
 		headers = self.create_header()
 		headers = self.add_header( headers, ( "Content-Type", "application/json") )
 		return self.end_response( headers, output )
 		
-	def get_user( self, method, page, data, variables ):
-		output = json.dumps(variables)
+	def post_response( self, request ):
 		headers = self.create_header()
-		headers = self.add_header( headers, ( "Content-Type", "application/json") )
+		headers = self.add_header( headers, ( "Content-Type", "application/octet-stream") )
+		return self.end_response( headers, request['post']['file_name'] )
+		
+	def get_user( self, request ):
+		output = self.template( 'user.html', request['variables'] )
+		headers = self.create_header()
 		return self.end_response( headers, output )
 		
-	def index( self, method, page, data, variables ):
-		output = "Welcome"
+	def get_post( self, request ):
+		output = json.dumps(request['variables'])
+		headers = self.add_header( headers, ( "Content-Type", "application/json") )
 		headers = self.create_header()
-		headers = self.add_header( headers, ( "Content-Type", "text/html") )
+		return self.end_response( headers, output )
+
+	def get_file( self, request ):
+		output = self.static_file( request['variables']['file'] )
+		headers = self.create_header()
+		return self.end_response( headers, output )
+		
+	def index( self, request ):
+		output = self.static_file( "index.html" )
+		headers = self.create_header()
 		return self.end_response( headers, output )
 
 
 def main():
 	address = "0.0.0.0"
-	port = 80
 
-	server = SimpleHTTPSServer.server( ( address, port ), my_test(), threading = True, key = 'server.key', crt = 'server.crt' )
+	http = server( ( address, 80 ), example(), bind_and_activate = False, threading = True )
+	# https = server( ( address, 443 ), example(), bind_and_activate = False, threading = True, key = 'server.key', crt = 'server.crt' )
+
+	# thread.start_new_thread( http.serve_forever, () )
+	http.serve_forever()
 
 if __name__ == '__main__':
 	main()

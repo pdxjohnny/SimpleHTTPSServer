@@ -124,9 +124,14 @@ class handler(object):
 				data += sock.recv(20)
 			# Parse the headers so he can use them
 			headers = self.get_headers( data )
-			if 'boundary=' in headers['Content-Type']:
+			feild_delim = False
+			if 'Content-Type' in headers and 'boundary=' in headers['Content-Type']:
 				feild_delim = headers['Content-Type'].split('boundary=')[-1]
-			data += self._recvall( sock, content_length - len(data.split('\r\n\r\n')[1]), feild_delim + '--\r\n' )
+			post_data = '\r\n' + '\r\n\r\n'.join(data.split('\r\n\r\n')[1:])
+			if feild_delim:
+				data += self._recvall( sock, content_length - len(post_data), feild_delim + '--\r\n' )
+			else:
+				data += self._recvall( sock, content_length - len(post_data) )
 		if len(data) < 1:
 			return False
 		return data
@@ -200,7 +205,10 @@ class handler(object):
 				feild_delim = headers['Content-Type'].split('boundary=')[-1]
 			# Dont take the first one because thats with the headers
 			post = feild_delim.join( data.split( feild_delim )[2:] )
-			post = urllib.unquote( post ).decode('utf8')
+			try:
+				post = urllib.unquote( post ).decode('utf8')
+			except:
+				pass
 			post = post.split(feild_delim)
 
 			post = [ p.split('\r\n\r\n') for p in post ]
@@ -258,17 +266,28 @@ class example(handler):
 	"""docstring for example"""
 	def __init__( self ):
 		super(example, self).__init__()
-		self.actions = [ ( 'post', '/post_file', self.post_response ),
+		self.actions = [ ( 'post', '/:any', self.post_echo ),
+			( 'post', '/post_file', self.post_response ),
 			( 'get', '/user/:username', self.get_user ),
 			( 'get', '/post/:year/:month/:day', self.get_post ),
 			( 'get', '/', self.index ),
 			( 'get', '/:file', self.get_file ) ]
 		
-	def post_response( self, request ):
-		form_data = self.form_data( request['data'] )
-		output = "<pre>" + json.dumps(form_data, sort_keys=True, indent=4, separators=(',', ': ')) + "</pre>"
+	def post_echo( self, request ):
+		try:
+			output = self.form_data( request['data'] )
+		except:
+			print request['data']
+			output = {'ERROR': 'parse_error'}
+		output = json.dumps( output )
 		headers = self.create_header()
+		headers = self.add_header( headers, ( "Content-Type", "application/json") )
 		return self.end_response( headers, output )
+		
+	def post_response( self, request ):
+		headers = self.create_header()
+		headers = self.add_header( headers, ( "Content-Type", "application/octet-stream") )
+		return self.end_response( headers, request['post']['file_name'] )
 		
 	def get_user( self, request ):
 		output = self.template( 'user.html', request['variables'] )
@@ -295,7 +314,7 @@ class example(handler):
 def main():
 	address = "0.0.0.0"
 
-	http = server( ( address, 80 ), example(), bind_and_activate = False, threading = False )
+	http = server( ( address, 80 ), example(), bind_and_activate = False, threading = True )
 	# https = server( ( address, 443 ), example(), bind_and_activate = False, threading = True, key = 'server.key', crt = 'server.crt' )
 
 	# thread.start_new_thread( http.serve_forever, () )
