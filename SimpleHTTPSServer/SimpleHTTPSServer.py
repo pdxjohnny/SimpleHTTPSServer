@@ -247,7 +247,7 @@ class handler(object):
 		if page[0] == '/':
 			page = page[1:]
 		if page == '' or page[-1] == '/':
-			page = 'index.html'
+			page += 'index.html'
 		# Get and return the index.html file
 		output = self.static_file( page )
 		headers = self.create_header()
