@@ -244,8 +244,6 @@ class handler(object):
 
 	def serve_page( self, page ):
 		# If this is the root page
-		if page[0] == '/':
-			page = page[1:]
 		if page == '' or page[-1] == '/':
 			page += 'index.html'
 		# Get and return the index.html file
@@ -325,8 +323,9 @@ class example(handler):
 		return self.end_response( headers, output )
 
 	def get_file( self, request ):
-		return self.serve_page( request["page"] )
+		return self.serve_page( directory + request["page"] )
 
+directory = os.path.dirname(os.path.realpath(__file__)) + '/'
 
 def main():
 	address = "0.0.0.0"
