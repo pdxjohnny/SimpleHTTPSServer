@@ -7,8 +7,13 @@ import Cookie
 import argparse
 import thread
 import os
+import sys
 import urllib2
 import traceback
+import mimetypes
+
+def log( message ):
+	print message
 
 class server(object):
 	def __init__(self, server_address, RequestHandler, bind_and_activate = True, key = False, crt = False, threading = False ):
@@ -23,6 +28,9 @@ class server(object):
 		self.RequestHandler = RequestHandler
 		self.server_address = server_address
 		self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		# So that we don't get socket error 98
+		# when the server restarts
+		self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
 		# If a .key and .crt file are provided make it an SSL socket
 		if self.key and self.crt:
@@ -37,7 +45,7 @@ class server(object):
 	def serve_forever( self ):
 		self.socket.bind( self.server_address )
 		self.socket.listen(10)
-		print "Waiting for connections..."
+		log( "Waiting for connections..." )
 		while True:
 			try:
 				client_socket, client_address = self.socket.accept()
@@ -47,7 +55,7 @@ class server(object):
 					self.RequestHandler._handle( client_socket, client_address )
 			except ssl.SSLError, e:
 				pass
-				# print "SSL ERROR", e
+				# log( "SSL ERROR %s" % str( e ), LOG_ERROR )
 
 class handler(object):
 
@@ -55,13 +63,14 @@ class handler(object):
 		self.actions = actions
 
 	def _handle( self, client_socket, client_address ):
-		# print "Reciving from", client_address
+		# log( "%s - opened connection." % str( client_address ) )
 		response = "500 Internal Server Error"
 		try:
 			data = self._recv( client_socket )
 			if data:
 				method, page = self._get_request( data )
-				print "\'%s\':\'%s\'" % ( method, page )
+				data = urllib.unquote( data ).decode('utf8') 
+				log( "\'%s\':\'%s\'" % ( method, page ) )
 				for action in self.actions:
 					variables = self._get_variables( page, action[1] )
 					if action[0] == method and variables:
@@ -75,14 +84,14 @@ class handler(object):
 						response = action[2]( request )
 						break
 		except Exception, e:
-			print '\n\n\n\n', "ERROR", e
-			print traceback.print_exc(), '\n\n\n\n'
+			log( "\n\n\n\nERROR %s" % str( e ) )
+			log( "%s\n\n\n\n" % str( traceback.print_exc() ) )
 
 		if response:
 			client_socket.sendall( response )
 		
 		client_socket.close()
-		# print client_address, "- closed connection."
+		# log( "%s - closed connection." % str( client_address ) )
 
 	def _get_variables( self, page, action ):
 		if page == action:
@@ -100,7 +109,8 @@ class handler(object):
 				item_num += 1
 			page_vars = {}
 			for position in variables:
-				page_vars[ action[position][1:] ] = page[position]
+				variable = urllib.unquote( page[position] ).decode('utf8') 
+				page_vars[ action[position][1:] ] = variable
 			if len(page) > len(action):
 				page_vars[ action[ variables[-1] ][1:] ] = '/'.join(page[ variables[-1] : ])
 			return page_vars
@@ -159,6 +169,8 @@ class handler(object):
 		page = '/' + '/'.join(first_line[1:])
 		page = 'HTTP'.join(page.split("HTTP")[:-1])
 		page = page.replace(' ', '')
+		method = urllib.unquote( method ).decode('utf8') 
+		page = urllib.unquote( page ).decode('utf8') 
 		return method, page
 
 	def create_header( self ):
@@ -230,6 +242,18 @@ class handler(object):
 			return form_data
 		return form_data
 
+	def serve_page( self, page ):
+		# If this is the root page
+		if page[0] == '/':
+			page = page[1:]
+		if page == '' or page[-1] == '/':
+			page = 'index.html'
+		# Get and return the index.html file
+		output = self.static_file( page )
+		headers = self.create_header()
+		headers["Content-Type"] = mimetypes.guess_type( page )[0]
+		return self.end_response( headers, output )
+
 	def static_file( self, page ):
 		response = '404 Not Found'
 		if os.name == 'nt':
@@ -266,11 +290,11 @@ class example(handler):
 	"""docstring for example"""
 	def __init__( self ):
 		super(example, self).__init__()
-		self.actions = [ ( 'post', '/:any', self.post_echo ),
+		self.actions = [
+			( 'post', '/:any', self.post_echo ),
 			( 'post', '/post_file', self.post_response ),
 			( 'get', '/user/:username', self.get_user ),
 			( 'get', '/post/:year/:month/:day', self.get_post ),
-			( 'get', '/', self.index ),
 			( 'get', '/:file', self.get_file ) ]
 		
 	def post_echo( self, request ):
@@ -301,20 +325,17 @@ class example(handler):
 		return self.end_response( headers, output )
 
 	def get_file( self, request ):
-		output = self.static_file( request['variables']['file'] )
-		headers = self.create_header()
-		return self.end_response( headers, output )
-		
-	def index( self, request ):
-		output = self.static_file( "index.html" )
-		headers = self.create_header()
-		return self.end_response( headers, output )
+		return self.serve_page( request["page"] )
 
 
 def main():
 	address = "0.0.0.0"
 
-	http = server( ( address, 80 ), example(), bind_and_activate = False, threading = True )
+	port = 80
+	if len( sys.argv ) > 1:
+		port = int ( sys.argv[1] )
+
+	http = server( ( address, port ), example(), bind_and_activate = False, threading = True )
 	# https = server( ( address, 443 ), example(), bind_and_activate = False, threading = True, key = 'server.key', crt = 'server.crt' )
 
 	# thread.start_new_thread( http.serve_forever, () )
