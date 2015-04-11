@@ -130,29 +130,38 @@ class handler(object):
 			# Receve until we have all the headers
 			# we know we have then wehn we reach the
 			# body delim, '\r\n\r\n'
-			while data.find('\r\n\r\n') == -1:
-				data += sock.recv(20)
+			headers, header_text = self.get_headers( data )
+			print len( data ), data[ len( header_text ) : ]
 			# Parse the headers so he can use them
-			headers = self.get_headers( data )
 			feild_delim = False
 			if 'Content-Type' in headers and 'boundary=' in headers['Content-Type']:
 				feild_delim = headers['Content-Type'].split('boundary=')[-1]
-			post_data = '\r\n' + '\r\n\r\n'.join(data.split('\r\n\r\n')[1:])
+			# The post_data will be what ever is after the header_text
+			post_data = data[ len( header_text ) : ]
+			# Remove the header to data break, we will add it back later
+			if post_data.find('\r\n\r\n') != -1:
+				post_data = '\r\n\r\n'.join(data.split('\r\n\r\n')[1:])
+			# Sometimes feild_delim messes up Content-Length so recive
+			# until the last is found otherwise recive the size
 			if feild_delim:
-				data += self._recvall( sock, content_length - len(post_data), feild_delim + '--\r\n' )
+				post_data += self._recvall( sock, content_length - len(post_data), feild_delim + '--\r\n' )
 			else:
-				data += self._recvall( sock, content_length - len(post_data) )
+				post_data += self._recvall( sock, content_length - len(post_data) )
 		if len(data) < 1:
 			return False
+		# Merge the headers with the posted data
+		data = header_text + "\r\n\r\n" + post_data
 		return data
 
 	def get_headers( self, data ):
 		headers_as_object = {}
-		headers = data.split('\r\n\r\n')[0]
+		headers = data
+		if data.find('\r\n\r\n') != -1:
+			headers = data.split('\r\n\r\n')[0]
 		for line in headers.split('\r\n'):
 			if line.find(': ') != -1:
 				headers_as_object[ line.split(': ')[0] ] = ': '.join(line.split(': ')[1:])
-		return headers_as_object
+		return headers_as_object, headers
 
 	def _recvall( self, sock, n, end_on = False ):
 		data = ''
@@ -210,7 +219,7 @@ class handler(object):
 
 	def form_data( self, data ):
 		form_data = {}
-		headers = self.get_headers( data )
+		headers, header_text = self.get_headers( data )
 		# form-data
 		if 'multipart/form-data' in headers['Content-Type']:
 			if 'boundary=' in headers['Content-Type']:
@@ -299,7 +308,7 @@ class example(handler):
 		try:
 			output = self.form_data( request['data'] )
 		except:
-			print request['data']
+			# print request['data']
 			output = {'ERROR': 'parse_error'}
 		output = json.dumps( output )
 		headers = self.create_header()
@@ -337,8 +346,9 @@ def main():
 	http = server( ( address, port ), example(), bind_and_activate = False, threading = True )
 	# https = server( ( address, 443 ), example(), bind_and_activate = False, threading = True, key = 'server.key', crt = 'server.crt' )
 
-	# thread.start_new_thread( http.serve_forever, () )
-	http.serve_forever()
+	# thread.start_new_thread( https.serve_forever, () )
+	thread.start_new_thread( http.serve_forever, () )
+	raw_input("Return Key to exit\n")
 
 
 if __name__ == '__main__':
