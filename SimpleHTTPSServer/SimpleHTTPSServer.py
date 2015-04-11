@@ -131,7 +131,6 @@ class handler(object):
 			# we know we have then wehn we reach the
 			# body delim, '\r\n\r\n'
 			headers, header_text = self.get_headers( data )
-			print len( data ), data[ len( header_text ) : ]
 			# Parse the headers so he can use them
 			feild_delim = False
 			if 'Content-Type' in headers and 'boundary=' in headers['Content-Type']:
