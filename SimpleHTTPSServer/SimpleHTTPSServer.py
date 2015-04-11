@@ -146,10 +146,10 @@ class handler(object):
 				post_data += self._recvall( sock, content_length - len(post_data), feild_delim + '--\r\n' )
 			else:
 				post_data += self._recvall( sock, content_length - len(post_data) )
+			# Merge the headers with the posted data
+			data = header_text + "\r\n\r\n" + post_data
 		if len(data) < 1:
 			return False
-		# Merge the headers with the posted data
-		data = header_text + "\r\n\r\n" + post_data
 		return data
 
 	def get_headers( self, data ):
