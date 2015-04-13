@@ -63,7 +63,7 @@ class handler(object):
 		self.actions = actions
 
 	def _handle( self, client_socket, client_address ):
-		# log( "%s - opened connection." % str( client_address ) )
+		log( "%s - opened connection." % str( client_address ) )
 		response = "500 Internal Server Error"
 		try:
 			data = self._recv( client_socket )
@@ -91,7 +91,7 @@ class handler(object):
 			client_socket.sendall( response )
 		
 		client_socket.close()
-		# log( "%s - closed connection." % str( client_address ) )
+		log( "%s - closed connection." % str( client_address ) )
 
 	def _get_variables( self, page, action ):
 		if page == action:
@@ -139,9 +139,10 @@ class handler(object):
 			post_data = data[ len( header_text ) : ]
 			# Remove the header to data break, we will add it back later
 			if post_data.find('\r\n\r\n') != -1:
-				post_data = '\r\n\r\n'.join(data.split('\r\n\r\n')[1:])
+				post_data = "\r\n" + '\r\n\r\n'.join(data.split('\r\n\r\n')[1:])
 			# Sometimes feild_delim messes up Content-Length so recive
 			# until the last is found otherwise recive the size
+			print post_data, content_length, len(post_data)
 			if feild_delim:
 				post_data += self._recvall( sock, content_length - len(post_data), feild_delim + '--\r\n' )
 			else:
