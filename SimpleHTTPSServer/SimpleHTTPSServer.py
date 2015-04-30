@@ -13,7 +13,7 @@ import traceback
 import mimetypes
 import datetime
 
-VERSION = 0.6
+VERSION = 0.6.1
 HTTP_VERSION = "HTTP/1.1"
 
 def log( message ):

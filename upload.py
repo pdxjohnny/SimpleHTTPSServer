@@ -41,7 +41,7 @@ def git_push():
 def upload():
 	command = "python setup.py sdist upload -r pypi"
 	os.system(command)
-	command = "pip install --upgrade SimpleHTTPSServer"
+	command = "sudo -E pip install --upgrade SimpleHTTPSServer"
 	os.system(command)
 
 def main():
