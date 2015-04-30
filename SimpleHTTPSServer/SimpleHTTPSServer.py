@@ -11,6 +11,10 @@ import sys
 import urllib2
 import traceback
 import mimetypes
+import datetime
+
+VERSION = 0.6
+HTTP_VERSION = "HTTP/1.1"
 
 def log( message ):
 	print message
@@ -81,6 +85,7 @@ class handler(object):
 							'variables': variables,
 							'socket': client_socket
 						}
+						# log( "%s - \n%s\n" % ( str( client_address ), data) )
 						response = action[2]( request )
 						break
 		except Exception, e:
@@ -118,13 +123,13 @@ class handler(object):
 
 	def _recv( self, sock ):
 		data = sock.recv(4048).strip()
-		# Check of a content length, if there is one
+		# Check of a Content-Length, if there is one
 		# then data is being uploaded
 		content_length = False
 		for line in data.split('\r\n'):
 			if 'Content-Length' in line:
 				content_length = int(line.split(' ')[-1])
-		# If theres a content length he now there is
+		# If theres a Content-Length he now there is
 		# a body that is seperated from the headers
 		if content_length:
 			# Receve until we have all the headers
@@ -183,9 +188,11 @@ class handler(object):
 
 	def create_header( self ):
 		headers = {
-			"HTTP/1.1": "200 OK",
-			"Content length": "",
-			"Content-Type": "text/html"
+			HTTP_VERSION: "200 OK",
+			"Content-Length": "",
+			"Content-Type": "text/html",
+			"Server": "SimpleHTTPS/%s Python/%s" % (str(VERSION), str(sys.version).split(" ")[0], ),
+			"Date": datetime.datetime.now().strftime('%a, %d %b %Y %H:%M:%S %Z')
 		}
 		return headers
 
@@ -194,11 +201,11 @@ class handler(object):
 		return headers
 
 	def end_response( self, headers, data ):
-		final = "HTTP/1.1 %s\n" % headers["HTTP/1.1"]
-		final += "Content length %d\n" % len(data)
+		final = "%s %s\n" % (HTTP_VERSION, headers[HTTP_VERSION],)
+		headers["Content-Length"] = len(data)
 		for prop in headers:
-			if prop != "HTTP/1.1" and prop != "Content length":
-				final += "%s: %s\n" % ( prop, headers[prop] )
+			if prop != HTTP_VERSION:
+				final += "%s: %s\n" % ( prop, str(headers[prop]), )
 		final += '\n'
 		return final + data
 
