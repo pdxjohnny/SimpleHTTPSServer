@@ -51,7 +51,7 @@
 	<div class="container">
 		<div class="sixteen columns">
 			<h1 class="remove-bottom" style="margin-top: 40px">Simple HTTPS Server</h1>
-			<h5>Version 0.2</h5>
+			<h5>Version 0.6</h5>
 			<hr />
 		</div>
 		<div class="sixteen columns">
@@ -65,22 +65,22 @@
 import SimpleHTTPSServer
 import json
 
-class example(handler):
-	"""example of how to use SimpleHTTPSServer"""
+class example(SimpleHTTPSServer.handler):
+	"""docstring for example"""
 	def __init__( self ):
 		super(example, self).__init__()
-		self.actions = [ ( 'post', '/:any', self.post_echo ),
+		self.actions = [
+			( 'post', '/:any', self.post_echo ),
 			( 'post', '/post_file', self.post_response ),
 			( 'get', '/user/:username', self.get_user ),
 			( 'get', '/post/:year/:month/:day', self.get_post ),
-			( 'get', '/', self.index ),
 			( 'get', '/:file', self.get_file ) ]
 		
 	def post_echo( self, request ):
 		try:
 			output = self.form_data( request['data'] )
 		except:
-			print request['data']
+			# print request['data']
 			output = {'ERROR': 'parse_error'}
 		output = json.dumps( output )
 		headers = self.create_header()
@@ -104,24 +104,23 @@ class example(handler):
 		return self.end_response( headers, output )
 
 	def get_file( self, request ):
-		output = self.static_file( request['variables']['file'] )
-		headers = self.create_header()
-		return self.end_response( headers, output )
-		
-	def index( self, request ):
-		output = self.static_file( "index.html" )
-		headers = self.create_header()
-		return self.end_response( headers, output )
+		return self.serve_page( directory + request["page"] )
 
+directory = os.path.dirname(os.path.realpath(__file__)) + '/'
 
 def main():
 	address = "0.0.0.0"
 
-	http = server( ( address, 80 ), example(), bind_and_activate = False, threading = True )
-	# https = server( ( address, 443 ), example(), bind_and_activate = False, threading = True, key = 'server.key', crt = 'server.crt' )
+	port = 80
+	if len( sys.argv ) > 1:
+		port = int ( sys.argv[1] )
 
-	# thread.start_new_thread( http.serve_forever, () )
-	http.serve_forever()
+	http = SimpleHTTPSServer.server( ( address, port ), example(), bind_and_activate = False, threading = True )
+	# https = SimpleHTTPSServer.server( ( address, 443 ), example(), bind_and_activate = False, threading = True, key = 'server.key', crt = 'server.crt' )
+
+	# thread.start_new_thread( https.serve_forever, () )
+	thread.start_new_thread( http.serve_forever, () )
+	raw_input("Return Key to exit\n")
 
 if __name__ == '__main__':
 	main()
