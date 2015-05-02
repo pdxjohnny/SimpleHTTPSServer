@@ -13,7 +13,7 @@ import traceback
 import mimetypes
 import datetime
 
-VERSION = "0.6.3"
+VERSION = "0.6.4"
 HTTP_VERSION = "HTTP/1.1"
 
 
@@ -250,7 +250,7 @@ class handler(object):
 			return form_data
 		# x-www-form-urlencoded
 		else:
-			post = urllib.unquote( data.split('\r\n\r\n')[1] ).decode('utf8')
+			post = urllib.unquote( data.split('\r\n\r\n')[1][2:] ).decode('utf8')
 			form_data = {}
 			for p in post.split('&'):
 				form_data[p.split('=')[0]] = p.split('=')[1]
@@ -314,8 +314,8 @@ class example(handler):
 		try:
 			output = self.form_data( request['data'] )
 		except:
-			# print request['data']
 			output = {'ERROR': 'parse_error'}
+		# print request['data']
 		output = json.dumps( output )
 		headers = self.create_header()
 		headers = self.add_header( headers, ( "Content-Type", "application/json") )
