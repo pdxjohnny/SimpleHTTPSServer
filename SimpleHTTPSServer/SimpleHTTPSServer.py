@@ -13,11 +13,9 @@ import traceback
 import mimetypes
 import datetime
 
-VERSION = "0.6.2"
+VERSION = "0.6.3"
 HTTP_VERSION = "HTTP/1.1"
 
-def log( message ):
-	print message
 
 class server(object):
 	def __init__(self, server_address, RequestHandler, bind_and_activate = True, key = False, crt = False, threading = False ):
@@ -49,7 +47,6 @@ class server(object):
 	def serve_forever( self ):
 		self.socket.bind( self.server_address )
 		self.socket.listen(10)
-		log( "Waiting for connections..." )
 		while True:
 			try:
 				client_socket, client_address = self.socket.accept()
@@ -59,22 +56,25 @@ class server(object):
 					self.RequestHandler._handle( client_socket, client_address )
 			except ssl.SSLError, e:
 				pass
-				# log( "SSL ERROR %s" % str( e ), LOG_ERROR )
+				# self.log( "SSL ERROR %s" % str( e ), LOG_ERROR )
 
 class handler(object):
 
 	def __init__( self, actions = [] ):
 		self.actions = actions
 
+	def log(self, message):
+		print message
+
 	def _handle( self, client_socket, client_address ):
-		# log( "%s - opened connection." % str( client_address ) )
+		# self.log( "%s - opened connection." % str( client_address ) )
 		response = "500 Internal Server Error"
 		try:
 			data = self._recv( client_socket )
 			if data:
 				method, page = self._get_request( data )
 				data = urllib.unquote( data ).decode('utf8') 
-				log( "\'%s\':\'%s\'" % ( method, page ) )
+				self.log( "\'%s\':\'%s\'" % ( method, page ) )
 				for action in self.actions:
 					variables = self._get_variables( page, action[1] )
 					if action[0] == method and variables:
@@ -85,18 +85,18 @@ class handler(object):
 							'variables': variables,
 							'socket': client_socket
 						}
-						# log( "%s - \n%s\n" % ( str( client_address ), data) )
+						# self.log( "%s - \n%s\n" % ( str( client_address ), data) )
 						response = action[2]( request )
 						break
 		except Exception, e:
-			log( "\n\n\n\nERROR %s" % str( e ) )
-			log( "%s\n\n\n\n" % str( traceback.print_exc() ) )
+			self.log( "\n\n\n\nERROR %s" % str( e ) )
+			self.log( "%s\n\n\n\n" % str( traceback.print_exc() ) )
 
 		if response:
 			client_socket.sendall( response )
 		
 		client_socket.close()
-		# log( "%s - closed connection." % str( client_address ) )
+		# self.log( "%s - closed connection." % str( client_address ) )
 
 	def _get_variables( self, page, action ):
 		if page == action:
