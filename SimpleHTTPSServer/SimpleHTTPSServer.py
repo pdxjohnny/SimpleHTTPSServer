@@ -67,10 +67,23 @@ class handler(object):
 		print message
 
 	def _handle( self, client_socket, client_address ):
+		keep_alive = self.handle_one_request( client_socket, client_address )
+		while keep_alive:
+			keep_alive = self.handle_one_request( client_socket, client_address )
+			print "done"
+			pass
+
+	def handle_one_request( self, client_socket, client_address ):
 		# self.log( "%s - opened connection." % str( client_address ) )
 		response = "500 Internal Server Error"
+		data = False
 		try:
-			data = self._recv( client_socket )
+			try:
+				print "recving"
+				data = self._recv( client_socket )
+			except Exception:
+				client_socket.close()
+				return False
 			if data:
 				method, page = self._get_request( data )
 				data = urllib.unquote( data ).decode('utf8') 
@@ -93,9 +106,19 @@ class handler(object):
 			self.log( "%s\n\n\n\n" % str( traceback.print_exc() ) )
 
 		if response:
+			print "sending"
 			client_socket.sendall( response )
-		
-		client_socket.close()
+			print "done sending"
+
+		if data:
+			headers, header_text = self.get_headers( data )
+			if headers["Connection"].lower() != "keep-alive":
+				client_socket.close()
+			return False
+		else:
+			client_socket.close()
+			return False
+		return True
 		# self.log( "%s - closed connection." % str( client_address ) )
 
 	def _get_variables( self, page, action ):
@@ -191,6 +214,7 @@ class handler(object):
 			HTTP_VERSION: "200 OK",
 			"Content-Length": "",
 			"Content-Type": "text/html",
+			"Connection": "keep-alive",
 			"Server": "SimpleHTTPS/%s Python/%s" % (str(VERSION), str(sys.version).split(" ")[0], ),
 			"Date": datetime.datetime.now().strftime('%a, %d %b %Y %H:%M:%S %Z')
 		}
