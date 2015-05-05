@@ -13,7 +13,7 @@ import traceback
 import mimetypes
 import datetime
 
-VERSION = "0.6.4"
+VERSION = "0.6.5"
 HTTP_VERSION = "HTTP/1.1"
 
 
@@ -67,19 +67,16 @@ class handler(object):
 		print message
 
 	def _handle( self, client_socket, client_address ):
+		# self.log( "%s - opened connection." % str( client_address ) )
 		keep_alive = self.handle_one_request( client_socket, client_address )
 		while keep_alive:
 			keep_alive = self.handle_one_request( client_socket, client_address )
-			print "done"
-			pass
 
 	def handle_one_request( self, client_socket, client_address ):
-		# self.log( "%s - opened connection." % str( client_address ) )
 		response = "500 Internal Server Error"
 		data = False
 		try:
 			try:
-				print "recving"
 				data = self._recv( client_socket )
 			except Exception:
 				client_socket.close()
@@ -103,18 +100,15 @@ class handler(object):
 						break
 		except Exception, e:
 			self.log( "\n\n\n\nERROR %s" % str( e ) )
-			self.log( "%s\n\n\n\n" % str( traceback.print_exc() ) )
 
 		if response:
-			print "sending"
 			client_socket.sendall( response )
-			print "done sending"
 
 		if data:
 			headers, header_text = self.get_headers( data )
-			if headers["Connection"].lower() != "keep-alive":
+			if not "Connection" in headers or headers["Connection"].lower() != "keep-alive":
 				client_socket.close()
-			return False
+				return False
 		else:
 			client_socket.close()
 			return False
@@ -339,7 +333,6 @@ class example(handler):
 			output = self.form_data( request['data'] )
 		except:
 			output = {'ERROR': 'parse_error'}
-		# print request['data']
 		output = json.dumps( output )
 		headers = self.create_header()
 		headers = self.add_header( headers, ( "Content-Type", "application/json") )
