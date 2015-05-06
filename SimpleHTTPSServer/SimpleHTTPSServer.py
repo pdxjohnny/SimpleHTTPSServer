@@ -13,7 +13,7 @@ import traceback
 import mimetypes
 import datetime
 
-VERSION = "0.6.5"
+VERSION = "0.6.6"
 HTTP_VERSION = "HTTP/1.1"
 
 
@@ -51,9 +51,9 @@ class server(object):
 			try:
 				client_socket, client_address = self.socket.accept()
 				if self.threading:
-					thread.start_new_thread( self.RequestHandler._handle, ( client_socket, client_address ) )
+					thread.start_new_thread( self.RequestHandler.start_connection, ( client_socket, client_address ) )
 				else:
-					self.RequestHandler._handle( client_socket, client_address )
+					self.RequestHandler.start_connection( client_socket, client_address )
 			except ssl.SSLError, e:
 				pass
 				# self.log( "SSL ERROR %s" % str( e ), LOG_ERROR )
@@ -66,11 +66,19 @@ class handler(object):
 	def log(self, message):
 		print message
 
-	def _handle( self, client_socket, client_address ):
+	def start_connection( self, client_socket, client_address ):
 		# self.log( "%s - opened connection." % str( client_address ) )
+		self._handle( client_socket, client_address )
+
+	def _handle( self, client_socket, client_address ):
 		keep_alive = self.handle_one_request( client_socket, client_address )
 		while keep_alive:
 			keep_alive = self.handle_one_request( client_socket, client_address )
+		self.end_connection( client_socket, client_address )
+
+	def end_connection( self, client_socket, client_address ):
+		# self.log( "%s - closed connection." % str( client_address ) )
+		pass
 
 	def handle_one_request( self, client_socket, client_address ):
 		response = "500 Internal Server Error"
