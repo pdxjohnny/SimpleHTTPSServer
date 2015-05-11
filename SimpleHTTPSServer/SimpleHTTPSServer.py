@@ -13,7 +13,7 @@ import traceback
 import mimetypes
 import datetime
 
-VERSION = "0.6.6"
+VERSION = "0.6.7"
 HTTP_VERSION = "HTTP/1.1"
 
 
@@ -91,7 +91,7 @@ class handler(object):
 				return False
 			if data:
 				method, page = self._get_request( data )
-				data = urllib.unquote( data ).decode('utf8') 
+				# data = urllib.unquote( data ).decode('utf8') 
 				self.log( "\'%s\':\'%s\'" % ( method, page ) )
 				for action in self.actions:
 					variables = self._get_variables( page, action[1] )
@@ -276,10 +276,12 @@ class handler(object):
 			return form_data
 		# x-www-form-urlencoded
 		else:
-			post = urllib.unquote( data.split('\r\n\r\n')[1][2:] ).decode('utf8')
+			post = data.split('\r\n\r\n')[1][2:]
 			form_data = {}
 			for p in post.split('&'):
-				form_data[p.split('=')[0]] = p.split('=')[1]
+				key = urllib.unquote(p.split('=')[0]).decode('utf8')
+				value = urllib.unquote(p.split('=')[1]).decode('utf8')
+				form_data[key] = value
 			return form_data
 		return form_data
 
