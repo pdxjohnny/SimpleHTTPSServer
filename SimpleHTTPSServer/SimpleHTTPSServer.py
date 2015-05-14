@@ -1,21 +1,26 @@
 #! /usr/bin/python
-import socket
-import json
-import urllib
-import ssl
-import Cookie
-import argparse
-import thread
 import os
 import sys
+import ssl
+import json
+import socket
+import urllib
+import Cookie
+import thread
+import base64
 import urllib2
+import datetime
+import argparse
 import traceback
 import mimetypes
-import datetime
 
-VERSION = "0.6.7"
+__version__ = "0.6.7"
 HTTP_VERSION = "HTTP/1.1"
-
+WORKING_DIR = os.getcwd()
+LINE_BREAK = u"\r\n"
+DOUBLE_LINE_BREAK = LINE_BREAK * 2
+ERROR_RESPONSE = ("500 Error", "<h1>500 Internal Server Error</h1>")
+AUTH_RESPONSE = ("401 Unauthorized", "<h1>401 Unauthorized</h1>")
 
 class server(object):
 	def __init__(self, server_address, RequestHandler, bind_and_activate = True, key = False, crt = False, threading = False ):
@@ -30,8 +35,7 @@ class server(object):
 		self.RequestHandler = RequestHandler
 		self.server_address = server_address
 		self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		# So that we don't get socket error 98
-		# when the server restarts
+		# So that we don't get socket error 98 when the server restarts
 		self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
 		# If a .key and .crt file are provided make it an SSL socket
@@ -68,20 +72,22 @@ class handler(object):
 
 	def start_connection( self, client_socket, client_address ):
 		# self.log( "%s - opened connection." % str( client_address ) )
-		self._handle( client_socket, client_address )
+		return self._handle( client_socket, client_address )
 
 	def _handle( self, client_socket, client_address ):
 		keep_alive = self.handle_one_request( client_socket, client_address )
 		while keep_alive:
 			keep_alive = self.handle_one_request( client_socket, client_address )
-		self.end_connection( client_socket, client_address )
+		return self.end_connection( client_socket, client_address )
 
 	def end_connection( self, client_socket, client_address ):
 		# self.log( "%s - closed connection." % str( client_address ) )
-		pass
+		return True
 
 	def handle_one_request( self, client_socket, client_address ):
-		response = "500 Internal Server Error"
+		found_method = False
+		response = False
+		authorized = True
 		data = False
 		try:
 			try:
@@ -96,6 +102,7 @@ class handler(object):
 				for action in self.actions:
 					variables = self._get_variables( page, action[1] )
 					if action[0] == method and variables:
+						found_method = True
 						request = {
 							'method': method,
 							'page': page,
@@ -104,16 +111,30 @@ class handler(object):
 							'socket': client_socket
 						}
 						# self.log( "%s - \n%s\n" % ( str( client_address ), data) )
-						response = action[2]( request )
+						if len(action) > 3:
+							authorized = action[3]( request )
+						if type(authorized) is bool and authorized is True:
+							response = action[2]( request )
 						break
 		except Exception, e:
 			self.log( "\n\n\n\nERROR %s" % str( e ) )
+			found_method = False
+
+		if not found_method:
+			headers = self.create_header()
+			headers[HTTP_VERSION] = ERROR_RESPONSE[0]
+			response = self.end_response( headers, ERROR_RESPONSE[1] )
+		elif type(authorized) is dict:
+			headers = self.create_header()
+			headers[HTTP_VERSION] = AUTH_RESPONSE[0]
+			headers[authorized["method"][0]] = authorized["method"][1]
+			response = self.end_response( headers, authorized["response"] )
 
 		if response:
 			client_socket.sendall( response )
 
 		if data:
-			headers, header_text = self.get_headers( data )
+			headers = self.get_headers( data )
 			if not "Connection" in headers or headers["Connection"].lower() != "keep-alive":
 				client_socket.close()
 				return False
@@ -151,7 +172,7 @@ class handler(object):
 		# Check of a Content-Length, if there is one
 		# then data is being uploaded
 		content_length = False
-		for line in data.split('\r\n'):
+		for line in data.split(LINE_BREAK):
 			if 'Content-Length' in line:
 				content_length = int(line.split(' ')[-1])
 		# If theres a Content-Length he now there is
@@ -159,8 +180,8 @@ class handler(object):
 		if content_length:
 			# Receve until we have all the headers
 			# we know we have then wehn we reach the
-			# body delim, '\r\n\r\n'
-			headers, header_text = self.get_headers( data )
+			# body delim, DOUBLE_LINE_BREAK
+			headers, header_text = self.get_headers(data, text=True)
 			# Parse the headers so he can use them
 			feild_delim = False
 			if 'Content-Type' in headers and 'boundary=' in headers['Content-Type']:
@@ -168,8 +189,8 @@ class handler(object):
 			# The post_data will be what ever is after the header_text
 			post_data = data[ len( header_text ) : ]
 			# Remove the header to data break, we will add it back later
-			if post_data.find('\r\n\r\n') != -1:
-				post_data = "\r\n" + '\r\n\r\n'.join(data.split('\r\n\r\n')[1:])
+			if post_data.find(DOUBLE_LINE_BREAK) != -1:
+				post_data = LINE_BREAK + DOUBLE_LINE_BREAK.join(data.split(DOUBLE_LINE_BREAK)[1:])
 			# Sometimes feild_delim messes up Content-Length so recive
 			# until the last is found otherwise recive the size
 			if feild_delim:
@@ -177,20 +198,22 @@ class handler(object):
 			else:
 				post_data += self._recvall( sock, content_length - len(post_data) )
 			# Merge the headers with the posted data
-			data = header_text + "\r\n\r\n" + post_data
+			data = header_text + DOUBLE_LINE_BREAK + post_data
 		if len(data) < 1:
 			return False
 		return data
 
-	def get_headers( self, data ):
+	def get_headers( self, data, text=False ):
 		headers_as_object = {}
 		headers = data
-		if data.find('\r\n\r\n') != -1:
-			headers = data.split('\r\n\r\n')[0]
-		for line in headers.split('\r\n'):
+		if data.find(DOUBLE_LINE_BREAK) != -1:
+			headers = data.split(DOUBLE_LINE_BREAK)[0]
+		for line in headers.split(LINE_BREAK):
 			if line.find(': ') != -1:
 				headers_as_object[ line.split(': ')[0] ] = ': '.join(line.split(': ')[1:])
-		return headers_as_object, headers
+		if text:
+			return headers_as_object, headers
+		return headers_as_object
 
 	def _recvall( self, sock, n, end_on = False ):
 		data = ''
@@ -214,10 +237,10 @@ class handler(object):
 	def create_header( self ):
 		headers = {
 			HTTP_VERSION: "200 OK",
-			"Content-Length": "",
+			"Content-Length": 0,
 			"Content-Type": "text/html",
 			"Connection": "keep-alive",
-			"Server": "SimpleHTTPS/%s Python/%s" % (str(VERSION), str(sys.version).split(" ")[0], ),
+			"Server": "SimpleHTTPS/%s Python/%s" % (str(__version__), str(sys.version).split(" ")[0], ),
 			"Date": datetime.datetime.now().strftime('%a, %d %b %Y %H:%M:%S %Z')
 		}
 		return headers
@@ -237,7 +260,7 @@ class handler(object):
 
 	def cookies( self, data ):
 		cookies = []
-		lines = data.split('\r\n')
+		lines = data.split(LINE_BREAK)
 		for line in xrange(0,len(lines)):
 			if "Cookie:" in lines[line]:
 				c = Cookie.SimpleCookie()
@@ -251,7 +274,7 @@ class handler(object):
 
 	def form_data( self, data ):
 		form_data = {}
-		headers, header_text = self.get_headers( data )
+		headers = self.get_headers( data )
 		# form-data
 		if 'multipart/form-data' in headers['Content-Type']:
 			if 'boundary=' in headers['Content-Type']:
@@ -264,7 +287,7 @@ class handler(object):
 				pass
 			post = post.split(feild_delim)
 
-			post = [ p.split('\r\n\r\n') for p in post ]
+			post = [ p.split(DOUBLE_LINE_BREAK) for p in post ]
 
 			form_data = {}
 			for p in post:
@@ -272,11 +295,11 @@ class handler(object):
 					name_start = p[0].find('\"') + 1
 					name_end = p[0].find('\"', name_start+1)
 					name = p[0][name_start:name_end]
-					form_data[ name ] = '\r\n\r\n'.join( p[1:] )[:-4]
+					form_data[ name ] = DOUBLE_LINE_BREAK.join( p[1:] )[:-4]
 			return form_data
 		# x-www-form-urlencoded
 		else:
-			post = data.split('\r\n\r\n')[1][2:]
+			post = data.split(DOUBLE_LINE_BREAK)[1][2:]
 			form_data = {}
 			for p in post.split('&'):
 				key = urllib.unquote(p.split('=')[0]).decode('utf8')
@@ -285,7 +308,7 @@ class handler(object):
 			return form_data
 		return form_data
 
-	def serve_page( self, page ):
+	def serve_page( self, page, request=False ):
 		# If this is the root page
 		if page == '' or page[-1] == '/':
 			page += 'index.html'
@@ -295,7 +318,7 @@ class handler(object):
 		headers["Content-Type"] = mimetypes.guess_type( page )[0]
 		return self.end_response( headers, output )
 
-	def static_file( self, page ):
+	def static_file( self, page, request=False ):
 		response = '404 Not Found'
 		if os.name == 'nt':
 			page = page.replace('/','\\')
@@ -308,7 +331,7 @@ class handler(object):
 			pass
 		return response
 
-	def template( self, page, variables ):
+	def template( self, page, variables, request=False ):
 		response = '404 Not Found'
 		if os.name == 'nt':
 			page = page.replace('/','\\')
@@ -326,6 +349,18 @@ class handler(object):
 			pass
 		return response
 
+	def basic_auth( self, request, response=AUTH_RESPONSE[1] ):
+		headers = self.get_headers(request["data"])
+		send_basic_auth = {
+			"method": ("WWW-Authenticate", "Basic"),
+			"response": response
+			}
+		if "Authorization" in headers:
+			auth = headers["Authorization"].split()[-1]
+			auth = base64.b64decode(auth)
+			return True, auth.split(":")
+		return False, send_basic_auth
+
 
 class example(handler):
 	"""docstring for example"""
@@ -336,7 +371,15 @@ class example(handler):
 			( 'post', '/post_file', self.post_response ),
 			( 'get', '/user/:username', self.get_user ),
 			( 'get', '/post/:year/:month/:day', self.get_post ),
-			( 'get', '/:file', self.get_file ) ]
+			( 'get', '/:file', self.get_file )
+			]
+
+	def auth( self, request ):
+		authorized, response = self.basic_auth(request)
+		if not authorized:
+			return response
+		username, password = response
+		return True
 		
 	def post_echo( self, request ):
 		try:
@@ -345,12 +388,12 @@ class example(handler):
 			output = {'ERROR': 'parse_error'}
 		output = json.dumps( output )
 		headers = self.create_header()
-		headers = self.add_header( headers, ( "Content-Type", "application/json") )
+		headers["Content-Type"] = "application/json"
 		return self.end_response( headers, output )
 		
 	def post_response( self, request ):
 		headers = self.create_header()
-		headers = self.add_header( headers, ( "Content-Type", "application/octet-stream") )
+		headers["Content-Type"] = "application/octet-stream"
 		return self.end_response( headers, request['post']['file_name'] )
 		
 	def get_user( self, request ):
@@ -360,14 +403,12 @@ class example(handler):
 		
 	def get_post( self, request ):
 		output = json.dumps(request['variables'])
-		headers = self.add_header( headers, ( "Content-Type", "application/json") )
+		headers["Content-Type"] = "application/json"
 		headers = self.create_header()
 		return self.end_response( headers, output )
 
 	def get_file( self, request ):
-		return self.serve_page( directory + request["page"] )
-
-directory = os.path.dirname(os.path.realpath(__file__)) + '/'
+		return self.serve_page( WORKING_DIR + request["page"] )
 
 def main():
 	address = "0.0.0.0"

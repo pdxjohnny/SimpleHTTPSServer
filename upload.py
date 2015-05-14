@@ -7,7 +7,7 @@ import shutil
 def update_version_files(version):
     files = {
         "setup.py": ("  version = ", "  version = \'%s\',\n"),
-        "SimpleHTTPSServer/SimpleHTTPSServer.py": ("VERSION = ", "VERSION = \"%s\"\n"),
+        "SimpleHTTPSServer/SimpleHTTPSServer.py": ("__version__ = ", "__version__ = \"%s\"\n"),
         "SimpleHTTPSServer/index.html": ("\t\t\t<h5>Version ", "\t\t\t<h5>Version %s</h5>\n")
         }
     for name in files:
