@@ -14,7 +14,7 @@ import argparse
 import traceback
 import mimetypes
 
-__version__ = "0.6.7"
+__version__ = "0.6.8"
 HTTP_VERSION = "HTTP/1.1"
 WORKING_DIR = os.getcwd()
 LINE_BREAK = u"\r\n"
