@@ -3,6 +3,7 @@ import os
 import sys
 import ssl
 import json
+import copy
 import socket
 import urllib
 import Cookie
@@ -14,13 +15,18 @@ import argparse
 import traceback
 import mimetypes
 
-__version__ = "0.6.8"
+__version__ = "0.6.9"
 HTTP_VERSION = "HTTP/1.1"
 WORKING_DIR = os.getcwd()
 LINE_BREAK = u"\r\n"
 DOUBLE_LINE_BREAK = LINE_BREAK * 2
 ERROR_RESPONSE = ("500 Error", "<h1>500 Internal Server Error</h1>")
 AUTH_RESPONSE = ("401 Unauthorized", "<h1>401 Unauthorized</h1>")
+SEND_BASIC_AUTH = {
+	"method": ("WWW-Authenticate", "Basic"),
+	"response": AUTH_RESPONSE[1]
+	}
+
 
 class server(object):
 	def __init__(self, server_address, RequestHandler, bind_and_activate = True, key = False, crt = False, threading = False ):
@@ -351,10 +357,8 @@ class handler(object):
 
 	def basic_auth( self, request, response=AUTH_RESPONSE[1] ):
 		headers = self.get_headers(request["data"])
-		send_basic_auth = {
-			"method": ("WWW-Authenticate", "Basic"),
-			"response": response
-			}
+		send_basic_auth = copy.deepcopy(SEND_BASIC_AUTH)
+		send_basic_auth["response"] = response
 		if "Authorization" in headers:
 			auth = headers["Authorization"].split()[-1]
 			auth = base64.b64decode(auth)
