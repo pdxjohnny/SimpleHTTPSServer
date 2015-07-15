@@ -15,7 +15,8 @@ import argparse
 import traceback
 import mimetypes
 
-__version__ = "0.6.9"
+__version__ = "0.6.91"
+PORT = 80
 HTTP_VERSION = "HTTP/1.1"
 WORKING_DIR = os.getcwd()
 LINE_BREAK = u"\r\n"
@@ -74,7 +75,17 @@ class handler(object):
 		self.actions = actions
 
 	def log(self, message):
-		print message
+		del message
+
+	def start(self, host="0.0.0.0", port=PORT, key=False, crt=False, threading=True, **kwargs):
+		self.log("Starting on {}:{}".format(host, port))
+		server_process = server((host, port), self, \
+			bind_and_activate=False, threading=True, \
+			key=key, crt=crt)
+		if threading:
+			thread.start_new_thread(server_process.serve_forever, ())
+		else:
+			server_process.serve_forever()
 
 	def start_connection( self, client_socket, client_address ):
 		# self.log( "%s - opened connection." % str( client_address ) )
@@ -103,7 +114,7 @@ class handler(object):
 				return False
 			if data:
 				method, page = self._get_request( data )
-				# data = urllib.unquote( data ).decode('utf8') 
+				# data = urllib.unquote( data ).decode('utf8')
 				self.log( "\'%s\':\'%s\'" % ( method, page ) )
 				for action in self.actions:
 					variables = self._get_variables( page, action[1] )
@@ -166,7 +177,7 @@ class handler(object):
 				item_num += 1
 			page_vars = {}
 			for position in variables:
-				variable = urllib.unquote( page[position] ).decode('utf8') 
+				variable = urllib.unquote( page[position] ).decode('utf8')
 				page_vars[ action[position][1:] ] = variable
 			if len(page) > len(action):
 				page_vars[ action[ variables[-1] ][1:] ] = '/'.join(page[ variables[-1] : ])
@@ -236,8 +247,8 @@ class handler(object):
 		page = '/' + '/'.join(first_line[1:])
 		page = 'HTTP'.join(page.split("HTTP")[:-1])
 		page = page.replace(' ', '')
-		method = urllib.unquote( method ).decode('utf8') 
-		page = urllib.unquote( page ).decode('utf8') 
+		method = urllib.unquote( method ).decode('utf8')
+		page = urllib.unquote( page ).decode('utf8')
 		return method, page
 
 	def create_header( self ):
@@ -384,7 +395,7 @@ class example(handler):
 			return response
 		username, password = response
 		return True
-		
+
 	def post_echo( self, request ):
 		try:
 			output = self.form_data( request['data'] )
@@ -394,17 +405,17 @@ class example(handler):
 		headers = self.create_header()
 		headers["Content-Type"] = "application/json"
 		return self.end_response( headers, output )
-		
+
 	def post_response( self, request ):
 		headers = self.create_header()
 		headers["Content-Type"] = "application/octet-stream"
 		return self.end_response( headers, request['post']['file_name'] )
-		
+
 	def get_user( self, request ):
 		output = self.template( 'user.html', request['variables'] )
 		headers = self.create_header()
 		return self.end_response( headers, output )
-		
+
 	def get_post( self, request ):
 		output = json.dumps(request['variables'])
 		headers["Content-Type"] = "application/json"
@@ -417,7 +428,7 @@ class example(handler):
 def main():
 	address = "0.0.0.0"
 
-	port = 80
+	port = PORT
 	if len( sys.argv ) > 1:
 		port = int ( sys.argv[1] )
 
