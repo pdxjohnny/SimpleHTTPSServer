@@ -42,9 +42,9 @@ def upload():
     command = "python setup.py sdist upload -r pypi"
     os.system(command)
     if not os.name == 'nt':
-        command = "sudo -HE python -m pip install --upgrade SimpleHTTPSServer"
+        command = "sudo -HE python -m pip install --no-cache-dir --upgrade SimpleHTTPSServer"
     else:
-        command = "python -m pip install --upgrade SimpleHTTPSServer"
+        command = "python -m pip install --no-cache-dir --upgrade SimpleHTTPSServer"
     os.system(command)
 
 def main():

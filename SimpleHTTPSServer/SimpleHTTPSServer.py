@@ -15,7 +15,7 @@ import argparse
 import traceback
 import mimetypes
 
-__version__ = "0.6.91"
+__version__ = "0.6.92"
 PORT = 80
 HTTP_VERSION = "HTTP/1.1"
 WORKING_DIR = os.getcwd()
@@ -58,7 +58,8 @@ class server(object):
 	def serve_forever( self ):
 		self.socket.bind( self.server_address )
 		self.socket.listen(10)
-		while True:
+		self.serving = True
+		while self.serving:
 			try:
 				client_socket, client_address = self.socket.accept()
 				if self.threading:
@@ -72,6 +73,7 @@ class server(object):
 class handler(object):
 
 	def __init__( self, actions = [] ):
+		self.server_process = False
 		self.actions = actions
 
 	def log(self, message):
@@ -79,13 +81,19 @@ class handler(object):
 
 	def start(self, host="0.0.0.0", port=PORT, key=False, crt=False, threading=True, **kwargs):
 		self.log("Starting on {}:{}".format(host, port))
-		server_process = server((host, port), self, \
+		self.server_process = server((host, port), self, \
 			bind_and_activate=False, threading=True, \
 			key=key, crt=crt)
 		if threading:
-			thread.start_new_thread(server_process.serve_forever, ())
+			thread.start_new_thread(self.server_process.serve_forever, ())
 		else:
-			server_process.serve_forever()
+			self.server_process.serve_forever()
+
+	def stop(self):
+		self.log("Stopping server")
+		if self.server_process:
+			self.server_process.serving = False
+		return True
 
 	def start_connection( self, client_socket, client_address ):
 		# self.log( "%s - opened connection." % str( client_address ) )
