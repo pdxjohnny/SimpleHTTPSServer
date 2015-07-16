@@ -1,2 +1,2 @@
 from SimpleHTTPSServer import *
-from SimpleWebSocket import *
+from SimpleWebSocketServer import *

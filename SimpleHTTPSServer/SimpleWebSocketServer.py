@@ -556,24 +556,25 @@ class WebSocket(object):
 
 
 class SimpleWebSocketServer(object):
-   def __init__(self, websocketclass):
+    def __init__(self, websocketclass):
       self.websocketclass = websocketclass
     #   self.serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     #   self.serversocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     #   self.serversocket.bind((host, port))
     #   self.serversocket.listen(5)
+      self.sockets_in_use = {}
       self.connections = {}
       self.listeners = []
       thread.start_new_thread(self.serveforever, ())
 
-   def _decorateSocket(self, sock):
+    def _decorateSocket(self, sock):
       return sock
 
-   def _constructWebSocket(self, sock):
+    def _constructWebSocket(self, sock):
       return self.websocketclass(sock)
 
-   def close(self):
-      self.serversocket.close()
+    def close(self):
+    #   self.serversocket.close()
 
       for conn in self.connections.itervalues():
          conn.close()
@@ -582,121 +583,136 @@ class SimpleWebSocketServer(object):
          except:
             pass
 
-   def __call__(self, request):
+    def __call__(self, request):
        try:
           sock = request["socket"]
           newsock = self._decorateSocket(sock)
           newsock.setblocking(0)
           fileno = newsock.fileno()
-          self.listeners.append(fileno)
           client = self._constructWebSocket(newsock)
         #   print "listening to ", client
           client._handleData(request["data"])
           self.connections[fileno] = client
+          self.listeners.append(fileno)
           print self.listeners
        except Exception as n:
           if sock is not None:
              sock.close()
 
-   def serveforever(self):
+    def serveforever(self):
       while True:
         #  print self.listeners
-         rList, wList, xList = select(self.listeners, self.listeners, self.listeners, 1)
+         rList, wList, xList = select(self.listeners, self.listeners, self.listeners, 3)
         #  print "rList", rList
-         print "wList", wList
-         time.sleep(3)
+        #  print "wList", wList
+        #  time.sleep(3)
         #  print "xList", xList
 
          for ready in wList:
-            print "wList", ready
-            client = None
-            try:
-               client = self.connections[ready]
-               while client.sendq:
-                  opcode, payload = client.sendq.popleft()
-                  remaining = client._sendBuffer(payload)
-                  if remaining is not None:
-                      client.sendq.appendleft((opcode, remaining))
-                      break
-                  else:
-                      if opcode == CLOSE:
-                         raise Exception("received client close")
-
-            except Exception as n:
-
-               if client:
-                  client.client.close()
-
-               try:
-                  if client:
-                     client.handleClose()
-               except:
-                  pass
-
-               try:
-                  del self.connections[ready]
-               except:
-                  pass
-
-               try:
-                  self.listeners.remove(ready)
-               except:
-                  pass
+             if not ready in self.sockets_in_use:
+                self.sockets_in_use[ready] = True
+                # print "wList", ready
+                thread.start_new_thread(self.handle_write_scoket, (ready, ))
 
          for ready in rList:
-            print "rList"
-            client = None
-            try:
-              client = self.connections[ready]
-              client._handleData()
-            except Exception as n:
-
-              if client:
-                 client.client.close()
-
-              try:
-                 if client:
-                    client.handleClose()
-              except:
-                 pass
-
-              try:
-                 del self.connections[ready]
-              except:
-                 pass
-
-              try:
-                 self.listeners.remove(ready)
-              except:
-                 pass
+             if not ready in self.sockets_in_use:
+                self.sockets_in_use[ready] = True
+                # print "rList", ready
+                thread.start_new_thread(self.handle_read_scoket, (ready, ))
 
          for failed in xList:
-            print "xList"
-            if failed == self.serversocket:
-               self.close()
-               raise Exception("server socket failed")
-            else:
-               client = None
-               try:
-                   client = self.connections[failed]
-                   client.client.close()
+             if not failed in self.sockets_in_use:
+                self.sockets_in_use[failed] = True
+                # print "xList", failed
+                thread.start_new_thread(self.handle_other_scoket, (failed, ))
 
-                   try:
-                      client.handleClose()
-                   except:
-                      pass
+    def handle_write_scoket(self, socket_fileno):
+        client = None
+        try:
+           client = self.connections[socket_fileno]
+           while client.sendq:
+              opcode, payload = client.sendq.popleft()
+              remaining = client._sendBuffer(payload)
+              if remaining is not None:
+                  client.sendq.appendleft((opcode, remaining))
+                  break
+              else:
+                  if opcode == CLOSE:
+                     raise Exception("received client close")
 
-                   try:
-                      self.listeners.remove(failed)
-                   except:
-                      pass
+        except Exception as n:
 
-               except:
-                  pass
+           try:
+              self.listeners.remove(socket_fileno)
+           except:
+              pass
 
-               finally:
-                  if client:
-                     del self.connections[failed]
+           if client:
+              client.client.close()
+
+           try:
+              if client:
+                 client.handleClose()
+           except:
+              pass
+
+           try:
+              del self.connections[socket_fileno]
+           except:
+              pass
+        del self.sockets_in_use[socket_fileno]
+
+    def handle_read_scoket(self, socket_fileno):
+        client = None
+        try:
+          client = self.connections[socket_fileno]
+          client._handleData()
+        except Exception as n:
+
+          try:
+             self.listeners.remove(socket_fileno)
+          except:
+             pass
+
+          if client:
+             client.client.close()
+
+          try:
+             if client:
+                client.handleClose()
+          except:
+             pass
+
+          try:
+             del self.connections[socket_fileno]
+          except:
+             pass
+        del self.sockets_in_use[socket_fileno]
+
+    def handle_other_scoket(self, socket_fileno):
+        client = None
+        try:
+           self.listeners.remove(socket_fileno)
+           client = self.connections[socket_fileno]
+           client.client.close()
+
+           try:
+              self.listeners.remove(socket_fileno)
+           except:
+              pass
+
+           try:
+              client.handleClose()
+           except:
+              pass
+
+        except:
+          pass
+
+        finally:
+          if client:
+             del self.connections[socket_fileno]
+        del self.sockets_in_use[socket_fileno]
 
 class SimpleSSLWebSocketServer(SimpleWebSocketServer):
 
