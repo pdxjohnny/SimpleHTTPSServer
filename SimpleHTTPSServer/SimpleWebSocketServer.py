@@ -595,7 +595,11 @@ class SimpleWebSocketServer(object):
          rList, wList, xList = select(self.listeners, self.listeners, self.listeners, 3)
 
          for ready in wList:
-             if not ready in self.sockets_in_use:
+             try:
+                 client = self.connections[ready]
+             except Exception as error:
+                  client = False
+             if not ready in self.sockets_in_use and client and client.sendq:
                 self.sockets_in_use[ready] = True
                 thread.start_new_thread(self.handle_write_scoket, (ready, ))
 

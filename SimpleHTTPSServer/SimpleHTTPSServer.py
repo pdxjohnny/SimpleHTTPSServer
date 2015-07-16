@@ -15,7 +15,7 @@ import argparse
 import traceback
 import mimetypes
 
-__version__ = "0.6.93"
+__version__ = "0.6.94"
 PORT = 80
 HTTP_VERSION = "HTTP/1.1"
 WORKING_DIR = os.getcwd()
@@ -233,9 +233,9 @@ class handler(object):
 			# Sometimes feild_delim messes up Content-Length so recive
 			# until the last is found otherwise recive the size
 			if feild_delim:
-				post_data += self._recvall( sock, content_length - len(post_data), feild_delim + '--\r\n' )
+				post_data += self._recvall( sock, content_length - len(post_data.lstrip()), feild_delim + '--\r\n' )
 			else:
-				post_data += self._recvall( sock, content_length - len(post_data) )
+				post_data += self._recvall( sock, content_length - len(post_data.lstrip()) )
 			# Merge the headers with the posted data
 			data = header_text + DOUBLE_LINE_BREAK + post_data
 		if len(data) < 1:
@@ -256,7 +256,6 @@ class handler(object):
 
 	def _recvall( self, sock, n, end_on = False ):
 		data = ''
-		n += 1
 		while len(data) < n:
 			if end_on and data[ -len(end_on): ] == end_on:
 				break
