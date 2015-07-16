@@ -77,7 +77,7 @@ class handler(object):
 		self.actions = actions
 
 	def log(self, message):
-		del message
+		print message
 
 	def start(self, host="0.0.0.0", port=PORT, key=False, crt=False, threading=True, **kwargs):
 		self.log("Starting on {}:{}".format(host, port))
@@ -96,17 +96,22 @@ class handler(object):
 		return True
 
 	def start_connection( self, client_socket, client_address ):
-		# self.log( "%s - opened connection." % str( client_address ) )
+		self.log( "%s - opened connection." % str( client_address ) )
 		return self._handle( client_socket, client_address )
 
 	def _handle( self, client_socket, client_address ):
 		keep_alive = self.handle_one_request( client_socket, client_address )
+		if keep_alive is None:
+			keep_alive = False
 		while keep_alive:
 			keep_alive = self.handle_one_request( client_socket, client_address )
+			# handle_one_request can request that the connection be demmed closed
+			if keep_alive is None:
+				break
 		return self.end_connection( client_socket, client_address )
 
 	def end_connection( self, client_socket, client_address ):
-		# self.log( "%s - closed connection." % str( client_address ) )
+		self.log( "%s - closed connection." % str( client_address ) )
 		return True
 
 	def handle_one_request( self, client_socket, client_address ):
@@ -117,8 +122,10 @@ class handler(object):
 		try:
 			try:
 				data = self._recv( client_socket )
-			except Exception:
+			except Exception as error:
 				client_socket.close()
+				self.log(error)
+				self.log("Closed connection")
 				return False
 			if data:
 				method, page = self._get_request( data )
@@ -158,15 +165,22 @@ class handler(object):
 		if response:
 			client_socket.sendall( response )
 
+		if response is None:
+			return response
+
 		if data:
 			headers = self.get_headers( data )
 			if not "Connection" in headers or headers["Connection"].lower() != "keep-alive":
 				client_socket.close()
+				self.log("No Connection Header")
+				self.log("Closed connection")
 				return False
 		else:
 			client_socket.close()
+			self.log("No data")
+			self.log("Closed connection")
 			return False
-		return True
+		return response
 		# self.log( "%s - closed connection." % str( client_address ) )
 
 	def _get_variables( self, page, action ):
@@ -193,7 +207,7 @@ class handler(object):
 		return False
 
 	def _recv( self, sock ):
-		data = sock.recv(4048).strip()
+		data = sock.recv(4048)
 		# Check of a Content-Length, if there is one
 		# then data is being uploaded
 		content_length = False
@@ -242,6 +256,7 @@ class handler(object):
 
 	def _recvall( self, sock, n, end_on = False ):
 		data = ''
+		n += 1
 		while len(data) < n:
 			if end_on and data[ -len(end_on): ] == end_on:
 				break
