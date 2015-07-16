@@ -15,7 +15,7 @@ import argparse
 import traceback
 import mimetypes
 
-__version__ = "0.6.94"
+__version__ = "0.6.95"
 PORT = 80
 HTTP_VERSION = "HTTP/1.1"
 WORKING_DIR = os.getcwd()
@@ -77,7 +77,7 @@ class handler(object):
 		self.actions = actions
 
 	def log(self, message):
-		print message
+		del message
 
 	def start(self, host="0.0.0.0", port=PORT, key=False, crt=False, threading=True, **kwargs):
 		self.log("Starting on {}:{}".format(host, port))
