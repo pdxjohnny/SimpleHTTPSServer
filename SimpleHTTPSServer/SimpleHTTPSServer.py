@@ -15,7 +15,7 @@ import argparse
 import traceback
 import mimetypes
 
-__version__ = "0.6.95"
+__version__ = "0.6.96"
 PORT = 80
 HTTP_VERSION = "HTTP/1.1"
 WORKING_DIR = os.getcwd()
@@ -214,6 +214,7 @@ class handler(object):
 		for line in data.split(LINE_BREAK):
 			if 'Content-Length' in line:
 				content_length = int(line.split(' ')[-1])
+				break
 		# If theres a Content-Length he now there is
 		# a body that is seperated from the headers
 		if content_length:

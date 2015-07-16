@@ -2,7 +2,7 @@ from distutils.core import setup
 setup(
   name = 'SimpleHTTPSServer',
   packages = ['SimpleHTTPSServer'], # this must be the same as the name above
-  version = '0.6.95',
+  version = '0.6.96',
   description = 'A simple python http and https webserver',
   author = 'John Andersen',
   author_email = 'johnandersenpdx@gmail.com',
