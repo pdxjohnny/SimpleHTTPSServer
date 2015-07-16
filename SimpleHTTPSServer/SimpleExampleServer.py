@@ -25,19 +25,19 @@ class SimpleChat(WebSocket):
    def handleMessage(self):
       for client in list(clients):
          if client != self:
-            client.sendMessage(self.name + ' - ' + self.data)
+            client.sendMessage(self.name[:5] + ' - ' + self.data)
 
    def handleConnected(self):
-      print self.name, 'connected'
+      print self.name[:5], 'connected'
       for client in list(clients):
-         client.sendMessage(self.name + u' - connected')
+         client.sendMessage(self.name[:5] + u' - connected')
       clients.append(self)
 
    def handleClose(self):
       clients.remove(self)
-      print self.name, 'closed'
+      print self.name[:5], 'closed'
       for client in list(clients):
-         client.sendMessage(self.name + u' - disconnected')
+         client.sendMessage(self.name[:5] + u' - disconnected')
 
 
 if __name__ == "__main__":

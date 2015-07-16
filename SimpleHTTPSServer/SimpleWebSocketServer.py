@@ -221,7 +221,6 @@ class WebSocket(object):
 
               self.handleMessage()
 
-
    def _handleData(self, data=False):
       # do the HTTP header and handshake
       if self.handshaked is False:
@@ -231,7 +230,6 @@ class WebSocket(object):
          if not data:
             raise Exception("remote socket closed")
          else:
-            print "_handleData", len(data)
             # accumulate
             self.headerbuffer += data
 
@@ -241,10 +239,8 @@ class WebSocket(object):
             # indicates end of HTTP header
             if '\r\n\r\n' in self.headerbuffer:
                self.request = HTTPRequest(self.headerbuffer)
-            #    print self.request
 
                # handshake rfc 6455
-               print self.request.headers.has_key('Sec-WebSocket-Key'.lower())
                if self.request.headers.has_key('Sec-WebSocket-Key'.lower()):
                   key = self.request.headers['Sec-WebSocket-Key'.lower()]
                   hStr = HANDSHAKE_STR % { 'acceptstr' :  base64.b64encode(hashlib.sha1(key + GUID_STR).digest()) }
@@ -254,7 +250,6 @@ class WebSocket(object):
                   self.handleConnected()
 
                else:
-                  print 'Sec-WebSocket-Key does not exist'
                   raise Exception('Sec-WebSocket-Key does not exist')
 
       # else do normal data
@@ -558,10 +553,6 @@ class WebSocket(object):
 class SimpleWebSocketServer(object):
     def __init__(self, websocketclass):
       self.websocketclass = websocketclass
-    #   self.serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    #   self.serversocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    #   self.serversocket.bind((host, port))
-    #   self.serversocket.listen(5)
       self.sockets_in_use = {}
       self.connections = {}
       self.listeners = []
@@ -601,29 +592,21 @@ class SimpleWebSocketServer(object):
 
     def serveforever(self):
       while True:
-        #  print self.listeners
          rList, wList, xList = select(self.listeners, self.listeners, self.listeners, 3)
-        #  print "rList", rList
-        #  print "wList", wList
-        #  time.sleep(3)
-        #  print "xList", xList
 
          for ready in wList:
              if not ready in self.sockets_in_use:
                 self.sockets_in_use[ready] = True
-                # print "wList", ready
                 thread.start_new_thread(self.handle_write_scoket, (ready, ))
 
          for ready in rList:
              if not ready in self.sockets_in_use:
                 self.sockets_in_use[ready] = True
-                # print "rList", ready
                 thread.start_new_thread(self.handle_read_scoket, (ready, ))
 
          for failed in xList:
              if not failed in self.sockets_in_use:
                 self.sockets_in_use[failed] = True
-                # print "xList", failed
                 thread.start_new_thread(self.handle_other_scoket, (failed, ))
 
     def handle_write_scoket(self, socket_fileno):
