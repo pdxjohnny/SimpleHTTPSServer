@@ -25,7 +25,7 @@ def update_version_files(version):
     return version
 
 def git_commit(message):
-    command = "git commit -am \"%s\"" % (message, )
+    command = "git commit -sam \"%s\"" % (message, )
     return os.system(command)
 
 def git_tag(version, message):

@@ -80,7 +80,7 @@ class handler(object):
 		del message
 
 	def start(self, host="0.0.0.0", port=PORT, key=False, crt=False, threading=True, **kwargs):
-		self.log("Starting on {}:{}".format(host, port))
+		self.log("Starting on {0}:{1}".format(host, port))
 		self.server_process = server((host, port), self, \
 			bind_and_activate=False, threading=True, \
 			key=key, crt=crt)

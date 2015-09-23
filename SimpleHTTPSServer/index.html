@@ -75,7 +75,7 @@ class example(SimpleHTTPSServer.handler):
 			( 'get', '/user/:username', self.get_user ),
 			( 'get', '/post/:year/:month/:day', self.get_post ),
 			( 'get', '/:file', self.get_file ) ]
-		
+
 	def post_echo( self, request ):
 		try:
 			output = self.form_data( request['data'] )
@@ -86,17 +86,17 @@ class example(SimpleHTTPSServer.handler):
 		headers = self.create_header()
 		headers = self.add_header( headers, ( "Content-Type", "application/json") )
 		return self.end_response( headers, output )
-		
+
 	def post_response( self, request ):
 		headers = self.create_header()
 		headers = self.add_header( headers, ( "Content-Type", "application/octet-stream") )
 		return self.end_response( headers, request['post']['file_name'] )
-		
+
 	def get_user( self, request ):
 		output = self.template( 'user.html', request['variables'] )
 		headers = self.create_header()
 		return self.end_response( headers, output )
-		
+
 	def get_post( self, request ):
 		output = json.dumps(request['variables'])
 		headers = self.add_header( headers, ( "Content-Type", "application/json") )
