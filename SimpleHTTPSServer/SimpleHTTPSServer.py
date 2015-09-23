@@ -15,7 +15,7 @@ import argparse
 import traceback
 import mimetypes
 
-__version__ = "0.6.97"
+__version__ = "0.6.98"
 PORT = 80
 HTTP_VERSION = "HTTP/1.1"
 WORKING_DIR = os.getcwd()
